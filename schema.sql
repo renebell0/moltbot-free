@@ -33,6 +33,14 @@ CREATE TABLE IF NOT EXISTS config (
   value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS metrics (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL, -- 'latency', 'tokens', 'error'
+  value REAL NOT NULL,
+  model_id TEXT,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Initialize default model
 INSERT OR IGNORE INTO config (key, value) VALUES ('active_model', '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
 

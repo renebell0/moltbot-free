@@ -12,6 +12,8 @@ export async function runAgent(
   const config = await env.DB.prepare('SELECT value FROM config WHERE key = ?').bind('active_model').first('value');
   const model = (config as string) || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   
+  const startTime = Date.now();
+
   // 1. Fetch Dynamic Skills from D1
   const { results: dbSkills } = await env.DB.prepare('SELECT * FROM skills WHERE active = 1').all();
   const dynamicTools = (dbSkills as any[]).map(s => JSON.parse(s.schema_json));
@@ -32,7 +34,14 @@ export async function runAgent(
       const content = response.response || '';
       const toolCalls = response.tool_calls || [];
 
-      if (toolCalls.length === 0) return { text: content };
+      if (toolCalls.length === 0) {
+        // Record metrics on success
+        const duration = Date.now() - startTime;
+        await env.DB.prepare('INSERT INTO metrics (type, value, model_id) VALUES (?, ?, ?)')
+          .bind('latency', duration, model)
+          .run();
+        return { text: content };
+      }
 
       currentMessages.push({ role: 'assistant', content: JSON.stringify(toolCalls) });
 
@@ -80,5 +89,12 @@ export async function runAgent(
       return { text: `System Error: ${e}` };
     }
   }
+
+  // Record metrics before returning
+  const duration = Date.now() - startTime;
+  await env.DB.prepare('INSERT INTO metrics (type, value, model_id) VALUES (?, ?, ?)')
+    .bind('latency', duration, model)
+    .run();
+
   return { text: 'Maximum reasoning iterations reached.' };
 }

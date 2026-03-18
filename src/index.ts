@@ -82,6 +82,11 @@ app.get('/api/logs', async (c) => {
   return c.json(results);
 });
 
+app.get('/api/metrics', async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM metrics ORDER BY timestamp DESC LIMIT 20').all();
+  return c.json(results.reverse());
+});
+
 app.get('/api/skills', async (c) => {
   const { results } = await c.env.DB.prepare('SELECT * FROM skills').all();
   return c.json(results);
