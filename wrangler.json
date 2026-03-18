@@ -10,8 +10,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "neutron-dev",
-      "database_id": "700f7489-5e97-4df6-b492-eaee695d092b"
+      "database_name": "moltbot_db",
+      "database_id": "7181b9c1-8088-4ec4-b2db-49a1c4ddc6b9"
     }
   ],
   "ai": {
