@@ -64,7 +64,6 @@
         const MetricsChart = ({ data }) => {
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
-
             useEffect(() => {
                 if (!data || data.length === 0) return;
                 if (chartInstance.current) chartInstance.current.destroy();
@@ -73,33 +72,12 @@
                     type: 'line',
                     data: {
                         labels: data.map((_, i) => i),
-                        datasets: [{
-                            label: 'Latency (ms)',
-                            data: data.map(d => d.value),
-                            borderColor: '#00f2ff',
-                            borderWidth: 3,
-                            fill: true,
-                            backgroundColor: 'rgba(0, 242, 255, 0.05)',
-                            tension: 0.4,
-                            pointRadius: 0
-                        }]
+                        datasets: [{ label: 'Latency (ms)', data: data.map(d => d.value), borderColor: '#00f2ff', borderWidth: 3, fill: true, backgroundColor: 'rgba(0, 242, 255, 0.05)', tension: 0.4, pointRadius: 0 }]
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { legend: { display: false } },
-                        scales: { x: { display: false }, y: { grid: { color: '#1f1f2e' }, ticks: { color: '#475569', font: { size: 10 } } } }
-                    }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: false }, y: { grid: { color: '#1f1f2e' }, ticks: { color: '#475569', font: { size: 10 } } } } }
                 });
             }, [data]);
-
-            if (!data || data.length === 0) return (
-                <div className="h-full flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-3xl text-slate-700">
-                    <i className="fas fa-chart-line text-3xl mb-2 opacity-20"></i>
-                    <p className="text-[10px] font-black uppercase tracking-widest">No telemetry data available yet</p>
-                </div>
-            );
-
+            if (!data || data.length === 0) return <div className="h-full flex items-center justify-center opacity-20 text-[10px] uppercase font-black tracking-widest border border-dashed border-slate-800 rounded-3xl">Waiting for telemetry...</div>;
             return <canvas ref={chartRef} />;
         };
 
@@ -107,10 +85,13 @@
             const [status, setStatus] = useState({ tools: [], conversations: 0, totalMessages: 0, available_models: [], active_model: '' });
             const [logs, setLogs] = useState([]);
             const [metrics, setMetrics] = useState([]);
+            const [dbSkills, setDbSkills] = useState([]);
             const [activeTab, setActiveTab] = useState('overview');
             const [chatMessages, setChatMessages] = useState([]);
             const [userInput, setUserInput] = useState('');
             const [isTyping, setIsTyping] = useState(false);
+            const [showSkillModal, setShowSkillModal] = useState(false);
+            const [newSkill, setNewSkill] = useState({ name: '', description: '', schema_json: '', endpoint_url: '' });
 
             useEffect(() => {
                 refreshAll();
@@ -120,30 +101,23 @@
 
             const refreshAll = async () => {
                 try {
-                    const [s, l, m] = await Promise.all([
+                    const [s, l, m, sk] = await Promise.all([
                         fetch('/api/status').then(r => r.json()),
                         fetch('/api/logs').then(r => r.json()),
-                        fetch('/api/metrics').then(r => r.json())
+                        fetch('/api/metrics').then(r => r.json()),
+                        fetch('/api/skills').then(r => r.json())
                     ]);
-                    setStatus(s);
-                    setLogs(l.reverse());
-                    setMetrics(m);
+                    setStatus(s); setLogs(l.reverse()); setMetrics(m); setDbSkills(sk);
                 } catch (e) {}
             };
 
-            const handleModelChange = async (newModel) => {
-                await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'active_model', value: newModel }) });
-                refreshAll();
-            };
-
-            const initSystem = async () => {
-                await fetch('/api/init');
-                refreshAll();
-            };
+            const handleModelChange = async (val) => { await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'active_model', value: val }) }); refreshAll(); };
+            const initSystem = async () => { await fetch('/api/init'); refreshAll(); };
+            const deleteSkill = async (id) => { await fetch(`/api/skills/${id}`, { method: 'DELETE' }); refreshAll(); };
+            const handleAddSkill = async (e) => { e.preventDefault(); await fetch('/api/skills', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newSkill) }); setShowSkillModal(false); refreshAll(); };
 
             const handleSendMessage = async (e) => {
-                e.preventDefault();
-                if (!userInput.trim()) return;
+                e.preventDefault(); if (!userInput.trim()) return;
                 const msg = userInput; setUserInput('');
                 setChatMessages(p => [...p, { role: 'user', content: msg }]);
                 setIsTyping(true);
@@ -155,47 +129,57 @@
             };
 
             return (
-                <div className="flex h-screen bg-openclaw-bg text-slate-300">
-                    <motion.div initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
-                        className="w-72 border-r border-openclaw-border flex flex-col bg-openclaw-surface/50 backdrop-blur-3xl p-6 hidden lg:flex">
+                <div className="flex h-screen bg-openclaw-bg text-slate-300 relative">
+                    <AnimatePresence>
+                        {showSkillModal && (
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl p-4">
+                                <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="glass w-full max-w-xl p-10 rounded-[3rem] border-openclaw-primary/30 shadow-[0_0_50px_rgba(255,45,85,0.1)]">
+                                    <h2 className="text-2xl font-black uppercase tracking-tighter mb-8 text-white">Inject Dynamic Skill</h2>
+                                    <form onSubmit={handleAddSkill} className="space-y-5">
+                                        <input placeholder="Tool Identifier (e.g. search_v2)" className="w-full bg-openclaw-bg border border-openclaw-border p-4 rounded-2xl text-sm font-bold outline-none focus:border-openclaw-primary" onChange={e => setNewSkill({...newSkill, name: e.target.value})} required/>
+                                        <textarea placeholder='JSON Schema Definition' className="w-full bg-black/50 border border-openclaw-border p-4 rounded-2xl text-xs font-mono h-40 outline-none focus:border-openclaw-primary" onChange={e => setNewSkill({...newSkill, schema_json: e.target.value})} required />
+                                        <input placeholder="Target Endpoint URL" className="w-full bg-openclaw-bg border border-openclaw-border p-4 rounded-2xl text-sm font-bold outline-none focus:border-openclaw-primary" onChange={e => setNewSkill({...newSkill, endpoint_url: e.target.value})} required/>
+                                        <div className="flex gap-4 pt-6">
+                                            <button type="submit" className="flex-1 bg-openclaw-primary py-4 rounded-2xl font-black uppercase text-xs tracking-widest glow-primary text-white">Deploy Skill</button>
+                                            <button type="button" onClick={() => setShowSkillModal(false)} className="px-8 border border-openclaw-border rounded-2xl text-xs font-bold uppercase tracking-widest hover:bg-white/5 transition">Abort</button>
+                                        </div>
+                                    </form>
+                                </motion.div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Sidebar */}
+                    <motion.div initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="w-72 border-r border-openclaw-border flex flex-col bg-openclaw-surface/50 backdrop-blur-3xl p-6 hidden lg:flex">
                         <div className="flex items-center gap-4 mb-12 px-2 animate-float">
-                            <div className="w-12 h-12 bg-gradient-to-br from-openclaw-primary to-purple-600 rounded-2xl flex items-center justify-center glow-primary">
-                                <i className="fas fa-brain text-white text-xl"></i>
-                            </div>
-                            <div>
-                                <h1 className="text-lg font-black tracking-tighter text-white uppercase">Moltbot<span className="text-openclaw-primary">.</span>OS</h1>
-                                <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase">Enterprise v2.0</span>
-                            </div>
+                            <div className="w-12 h-12 bg-gradient-to-br from-openclaw-primary to-purple-600 rounded-2xl flex items-center justify-center glow-primary"><i className="fas fa-brain text-white text-xl"></i></div>
+                            <div><h1 className="text-lg font-black tracking-tighter text-white uppercase">Moltbot<span className="text-openclaw-primary">.</span>OS</h1><span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase">Enterprise v2.0</span></div>
                         </div>
                         <nav className="space-y-3">
                             {[
                                 { id: 'overview', icon: 'fa-chart-pie', label: 'Analytics' },
                                 { id: 'chat', icon: 'fa-comment-dots', label: 'Agent Hub' },
-                                { id: 'console', icon: 'fa-microchip', label: 'Kernel Logs' }
+                                { id: 'console', icon: 'fa-microchip', label: 'Kernel Logs' },
+                                { id: 'skills', icon: 'fa-bolt', label: 'Skill Matrix' }
                             ].map(item => (
                                 <motion.button whileHover={{ x: 5 }} whileTap={{ scale: 0.95 }} key={item.id} onClick={() => setActiveTab(item.id)}
                                     className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all relative overflow-hidden ${activeTab === item.id ? 'bg-openclaw-primary text-white shadow-2xl glow-primary' : 'hover:bg-white/5 text-slate-500'}`}>
-                                    <i className={`fas ${item.icon} text-sm`}></i>
-                                    <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
+                                    <i className={`fas ${item.icon} text-sm`}></i><span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
                                 </motion.button>
                             ))}
                         </nav>
                         <div className="mt-auto p-4 bg-openclaw-surface-light/30 rounded-3xl border border-white/5">
-                            <p className="text-[9px] font-black text-slate-600 uppercase mb-3 text-center">System Control</p>
-                            <button onClick={initSystem} className="w-full bg-openclaw-accent/10 border border-openclaw-accent/20 text-openclaw-accent text-[9px] font-black uppercase py-2 rounded-xl hover:bg-openclaw-accent/20 transition-all">Initialize Kernel</button>
+                            <button onClick={initSystem} className="w-full bg-openclaw-accent/10 border border-openclaw-accent/20 text-openclaw-accent text-[9px] font-black uppercase py-3 rounded-xl hover:bg-openclaw-accent/20 transition-all">Re-initialize Kernel</button>
                         </div>
                     </motion.div>
 
+                    {/* Main Content */}
                     <div className="flex-1 flex flex-col min-w-0">
                         <header className="h-20 border-b border-openclaw-border flex items-center justify-between px-8 bg-openclaw-surface/30 backdrop-blur-xl">
-                            <div className="flex gap-3">
-                                <StatusBadge label="Kernel" value="Stable" active={true} />
-                                <StatusBadge label="Uptime" value="100%" active={true} />
-                            </div>
+                            <div className="flex gap-3"><StatusBadge label="Kernel" value="Stable" active={true} /><StatusBadge label="Uptime" value="100%" active={true} /></div>
                             <motion.div whileHover={{ scale: 1.02 }} className="flex items-center gap-3 bg-openclaw-bg border border-openclaw-border p-1.5 pl-4 rounded-2xl">
                                 <span className="text-[10px] font-black text-slate-500 uppercase">AI Engine</span>
-                                <select value={status.active_model} onChange={(e) => handleModelChange(e.target.value)}
-                                    className="bg-openclaw-surface-light border-none rounded-xl text-[10px] font-black uppercase px-3 py-2 outline-none text-openclaw-accent cursor-pointer">
+                                <select value={status.active_model} onChange={(e) => handleModelChange(e.target.value)} className="bg-openclaw-surface-light border-none rounded-xl text-[10px] font-black uppercase px-3 py-2 outline-none text-openclaw-accent cursor-pointer">
                                     {status.available_models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                             </motion.div>
@@ -207,23 +191,20 @@
                                     <motion.div key="overview" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="h-full grid grid-cols-12 grid-rows-6 gap-6">
                                         <Card className="col-span-12 lg:col-span-8 row-span-4 flex flex-col">
                                             <div className="flex justify-between items-start mb-8">
-                                                <div><h3 className="text-xl font-black text-white tracking-tighter uppercase">Latency Telemetry</h3><p className="text-xs text-slate-500 font-bold">Real-time inference performance (ms)</p></div>
-                                                <div className="text-right">
-                                                    <p className="text-2xl font-black text-openclaw-accent tracking-tighter">{metrics.length > 0 ? Math.round(metrics[metrics.length-1].value) : 0}ms</p>
-                                                    <p className="text-[10px] font-black text-slate-600 uppercase">Avg Response</p>
-                                                </div>
+                                                <div><h3 className="text-xl font-black text-white tracking-tighter uppercase">Latency Telemetry</h3><p className="text-xs text-slate-500 font-bold">Inference performance metrics</p></div>
+                                                <div className="text-right"><p className="text-2xl font-black text-openclaw-accent tracking-tighter">{metrics.length > 0 ? Math.round(metrics[metrics.length-1].value) : 0}ms</p><p className="text-[10px] font-black text-slate-600 uppercase">Latest Resp</p></div>
                                             </div>
                                             <div className="flex-1 min-h-0"><MetricsChart data={metrics} /></div>
                                         </Card>
                                         <Card className="col-span-12 lg:col-span-4 row-span-2" delay={0.1}>
                                             <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Message Store</p>
                                             <p className="text-4xl font-black text-white tracking-tighter">{status.totalMessages}</p>
-                                            <p className="text-[9px] font-black text-slate-600 uppercase mt-4">Database: Cloudflare D1</p>
+                                            <p className="text-[9px] font-black text-openclaw-primary uppercase mt-4">Cloudflare D1 Stack</p>
                                         </Card>
                                         <Card className="col-span-12 lg:col-span-4 row-span-2" delay={0.2}>
-                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Active Channels</p>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Total Conversations</p>
                                             <p className="text-4xl font-black text-white tracking-tighter">{status.conversations}</p>
-                                            <div className="mt-4 flex gap-2"><i className="fab fa-telegram text-openclaw-accent"></i> <i className="fas fa-globe text-slate-600"></i></div>
+                                            <div className="mt-4 flex gap-3 text-slate-600"><i className="fab fa-telegram"></i><i className="fas fa-globe"></i><i className="fas fa-terminal"></i></div>
                                         </Card>
                                     </motion.div>
                                 )}
@@ -231,26 +212,37 @@
                                 {activeTab === 'chat' && (
                                     <motion.div key="chat" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="h-full flex flex-col glass rounded-[2.5rem] overflow-hidden">
                                         <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
-                                            {chatMessages.length === 0 && (
-                                                <div className="h-full flex flex-col items-center justify-center opacity-20">
-                                                    <i className="fas fa-terminal text-6xl mb-4"></i>
-                                                    <p className="text-xs font-black uppercase tracking-[0.5em]">Kernel Standing By</p>
-                                                </div>
-                                            )}
                                             {chatMessages.map((m, i) => (
                                                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                                    <div className={`max-w-[70%] p-5 rounded-3xl text-sm font-bold border ${m.role === 'user' ? 'bg-openclaw-primary border-transparent text-white glow-primary' : 'bg-openclaw-surface-light border-white/5 text-slate-200'}`}>
-                                                        {m.content}
-                                                    </div>
+                                                    <div className={`max-w-[70%] p-5 rounded-3xl text-sm font-bold border ${m.role === 'user' ? 'bg-openclaw-primary border-transparent text-white glow-primary' : 'bg-openclaw-surface-light border-white/5 text-slate-200'}`}>{m.content}</div>
                                                 </div>
                                             ))}
+                                            {isTyping && <div className="flex gap-2 p-4 bg-white/5 w-fit rounded-2xl animate-pulse"><div className="w-2 h-2 bg-openclaw-accent rounded-full"></div><div className="w-2 h-2 bg-openclaw-accent rounded-full opacity-50"></div></div>}
                                         </div>
                                         <div className="p-6 bg-openclaw-surface/50 border-t border-white/5">
-                                            <form onSubmit={handleSendMessage} className="flex gap-4 max-w-5xl mx-auto bg-openclaw-bg p-2 rounded-[2rem] border border-white/5">
-                                                <input value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="Send command..." className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm" />
+                                            <form onSubmit={handleSendMessage} className="flex gap-4 max-w-5xl mx-auto bg-openclaw-bg p-2 rounded-[2rem] border border-white/5 shadow-2xl">
+                                                <input value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="Type a command to the kernel..." className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm" />
                                                 <button type="submit" className="w-12 h-12 bg-openclaw-primary rounded-2xl text-white shadow-lg"><i className="fas fa-arrow-up"></i></button>
                                             </form>
                                         </div>
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'skills' && (
+                                    <motion.div key="skills" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="h-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max overflow-y-auto scrollbar-hide">
+                                        {status.tools.map(tool => (
+                                            <Card key={tool} className="border-b-4 border-b-openclaw-accent"><div className="w-14 h-14 bg-slate-800 rounded-2xl flex items-center justify-center mb-6"><i className="fas fa-puzzle-piece text-openclaw-accent text-xl"></i></div><h4 className="font-black uppercase tracking-widest text-white mb-2">{tool}</h4><p className="text-[10px] font-black text-openclaw-accent uppercase">Native System Tool</p></Card>
+                                        ))}
+                                        {dbSkills.map(skill => (
+                                            <Card key={skill.id} className="border-b-4 border-b-openclaw-primary relative group">
+                                                <button onClick={() => deleteSkill(skill.id)} className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity text-slate-600 hover:text-red-500"><i className="fas fa-trash"></i></button>
+                                                <div className="w-14 h-14 bg-slate-800 rounded-2xl flex items-center justify-center mb-6"><i className="fas fa-plug text-openclaw-primary text-xl"></i></div>
+                                                <h4 className="font-black uppercase tracking-widest text-white mb-2">{skill.name}</h4><p className="text-[10px] font-black text-openclaw-primary uppercase">Dynamic Plug</p>
+                                            </Card>
+                                        ))}
+                                        <motion.div onClick={() => setShowSkillModal(true)} whileHover={{ scale: 1.02 }} className="glass p-10 rounded-[2rem] border-dashed border-2 border-slate-800 flex flex-col items-center justify-center text-slate-600 hover:text-openclaw-primary hover:border-openclaw-primary/50 transition-all cursor-pointer group">
+                                            <i className="fas fa-plus-circle text-3xl mb-4 group-hover:scale-110 transition-transform"></i><span className="text-[11px] font-black uppercase tracking-widest">Inject New Skill</span>
+                                        </motion.div>
                                     </motion.div>
                                 )}
 
@@ -261,12 +253,11 @@
                                             <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-500/20"></div><div className="w-2 h-2 rounded-full bg-yellow-500/20"></div><div className="w-2 h-2 rounded-full bg-green-500/20"></div></div>
                                         </div>
                                         <div className="flex-1 overflow-y-auto font-mono text-[11px] space-y-2 scrollbar-hide bg-black/20 p-6 rounded-3xl">
-                                            {logs.length === 0 && <p className="text-slate-700 animate-pulse">Initializing pensamiento recursivo...</p>}
                                             {logs.map(log => (
-                                                <div key={log.id} className="flex gap-4 border-l border-slate-800 pl-4 py-1">
+                                                <div key={log.id} className="flex gap-4 border-l border-slate-800 pl-4 py-1 hover:bg-white/5 transition">
                                                     <span className="text-slate-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                                                     <span className={`uppercase text-[9px] font-black h-fit px-1 rounded ${log.level === 'error' ? 'text-red-500' : log.level === 'info' ? 'text-openclaw-accent' : 'text-green-500'}`}>{log.level}</span>
-                                                    <span className="text-slate-400">{log.message}</span>
+                                                    <span className="text-slate-400 leading-tight">{log.message}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -278,7 +269,6 @@
                 </div>
             );
         }
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
