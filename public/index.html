@@ -3,37 +3,81 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Moltbot-Free | Control Center</title>
+    <title>Moltbot Dashboard | Control Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'openclaw-bg': '#0a0a0f',
+                        'openclaw-surface': '#111119',
+                        'openclaw-surface-light': '#1a1a24',
+                        'openclaw-primary': '#e94560',
+                        'openclaw-accent': '#4ade80',
+                        'openclaw-border': '#2d2d3a'
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
     <style>
-        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
-        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        body { background-color: #0a0a0f; color: #f8f9fa; -webkit-font-smoothing: antialiased; }
+        .glass { background: rgba(17, 17, 25, 0.8); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+        .glow-red { box-shadow: 0 0 20px rgba(233, 69, 96, 0.2); }
+        .glow-green { box-shadow: 0 0 20px rgba(74, 222, 128, 0.15); }
+        .scrollbar-hide::-webkit-scrollbar { width: 4px; }
+        .scrollbar-hide::-webkit-scrollbar-track { background: transparent; }
+        .scrollbar-hide::-webkit-scrollbar-thumb { background: #2d2d3a; border-radius: 10px; }
+        @keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+        .animate-pulse-soft { animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="font-sans overflow-hidden h-screen">
+    <div id="root" class="h-full"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
+
+        const StatusBadge = ({ label, value, active }) => (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-openclaw-border bg-openclaw-surface-light/30">
+                <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-openclaw-accent shadow-[0_0_8px_rgba(74,222,128,0.5)]' : 'bg-slate-600'}`}></span>
+                <span className="text-[10px] uppercase font-extrabold tracking-widest text-slate-500">{label}</span>
+                <span className="text-xs font-bold text-slate-200">{value}</span>
+            </div>
+        );
 
         function App() {
-            const [status, setStatus] = useState({});
+            const [status, setStatus] = useState({ tools: [] });
             const [logs, setLogs] = useState([]);
-            const [activeTab, setActiveTab] = useState('status');
+            const [activeTab, setActiveTab] = useState('overview');
+            const [loading, setLoading] = useState(true);
+            const scrollRef = useRef(null);
 
             useEffect(() => {
-                fetchStatus();
-                fetchLogs();
-                const interval = setInterval(() => {
-                    fetchLogs();
-                }, 5000);
+                const init = async () => {
+                    await Promise.all([fetchStatus(), fetchLogs()]);
+                    setLoading(false);
+                };
+                init();
+                const interval = setInterval(fetchLogs, 4000);
                 return () => clearInterval(interval);
             }, []);
+
+            useEffect(() => {
+                if (scrollRef.current) {
+                    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+                }
+            }, [logs]);
 
             const fetchStatus = async () => {
                 try {
@@ -47,102 +91,197 @@
                 try {
                     const res = await fetch('/api/logs');
                     const data = await res.json();
-                    setLogs(data);
+                    setLogs(data.reverse()); // Newest at bottom for terminal feel
                 } catch (e) { console.error(e); }
             };
 
+            if (loading) return (
+                <div className="h-screen flex items-center justify-center bg-openclaw-bg">
+                    <div className="text-openclaw-primary animate-pulse flex flex-col items-center">
+                        <i className="fas fa-ghost text-4xl mb-4"></i>
+                        <span className="text-xs tracking-[0.4em] font-black uppercase">Initializing OS</span>
+                    </div>
+                </div>
+            );
+
             return (
-                <div className="min-h-screen flex flex-col p-4 md:p-8">
-                    {/* Header */}
-                    <div className="flex justify-between items-center mb-8 glass p-4 rounded-2xl">
-                        <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-                                <i className="fas fa-robot text-xl"></i>
+                <div className="flex h-screen overflow-hidden bg-openclaw-bg">
+                    {/* Lateral Navigation (Sidebar) */}
+                    <div className="w-16 md:w-64 border-r border-openclaw-border flex flex-col bg-openclaw-surface p-4">
+                        <div className="flex items-center gap-3 mb-10 px-2">
+                            <div className="w-10 h-10 bg-gradient-to-tr from-openclaw-primary to-rose-400 rounded-xl flex items-center justify-center glow-red">
+                                <i className="fas fa-ghost text-lg text-white"></i>
                             </div>
-                            <div>
-                                <h1 className="text-xl font-bold tracking-tight">Moltbot-Free</h1>
-                                <p className="text-xs text-blue-400">Agentic OS v1.0.0</p>
+                            <div className="hidden md:block">
+                                <h1 className="text-sm font-black tracking-tight text-white uppercase">Moltbot-Free</h1>
+                                <span className="text-[10px] text-openclaw-primary font-bold">CONTROL CENTER</span>
                             </div>
                         </div>
-                        <div className="flex gap-2">
-                            <span className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 py-1 rounded-full text-xs font-medium border border-green-500/20">
-                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                                System Online
-                            </span>
+
+                        <nav className="flex-1 space-y-2">
+                            {[
+                                { id: 'overview', icon: 'fa-layer-group', label: 'System Overview' },
+                                { id: 'skills', icon: 'fa-puzzle-piece', label: 'Agent Skills' },
+                                { id: 'console', icon: 'fa-terminal', label: 'Thinking Console' },
+                                { id: 'settings', icon: 'fa-cog', label: 'Settings' }
+                            ].map(item => (
+                                <button
+                                    key={item.id}
+                                    onClick={() => setActiveTab(item.id)}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
+                                        activeTab === item.id 
+                                        ? 'bg-openclaw-primary text-white shadow-lg' 
+                                        : 'text-slate-500 hover:bg-openclaw-surface-light hover:text-white'
+                                    }`}
+                                >
+                                    <i className={`fas ${item.icon} w-5 text-center`}></i>
+                                    <span className="hidden md:block text-xs font-bold uppercase tracking-wider">{item.label}</span>
+                                </button>
+                            ))}
+                        </nav>
+
+                        <div className="mt-auto p-2">
+                            <div className="p-3 bg-openclaw-surface-light/50 border border-openclaw-border rounded-xl hidden md:block">
+                                <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase">Core Load</p>
+                                <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full bg-openclaw-primary w-1/3"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
-                        {/* Sidebar */}
-                        <div className="lg:col-span-1 space-y-4">
-                            <button 
-                                onClick={() => setActiveTab('status')}
-                                className={`w-full text-left p-4 rounded-xl flex items-center gap-3 transition ${activeTab === 'status' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
-                                <i className="fas fa-chart-line"></i> Status & Config
-                            </button>
-                            <button 
-                                onClick={() => setActiveTab('logs')}
-                                className={`w-full text-left p-4 rounded-xl flex items-center gap-3 transition ${activeTab === 'logs' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
-                                <i className="fas fa-terminal"></i> Activity Logs
-                            </button>
-                        </div>
-
-                        {/* Content */}
-                        <div className="lg:col-span-3">
-                            {activeTab === 'status' && (
-                                <div className="space-y-6">
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <div className="glass p-6 rounded-2xl">
-                                            <p className="text-slate-400 text-sm mb-1">Platform</p>
-                                            <p className="font-bold">{status.platform}</p>
-                                        </div>
-                                        <div className="glass p-6 rounded-2xl">
-                                            <p className="text-slate-400 text-sm mb-1">Interface</p>
-                                            <p className="font-bold">{status.interface}</p>
-                                        </div>
-                                        <div className="glass p-6 rounded-2xl">
-                                            <p className="text-slate-400 text-sm mb-1">Model</p>
-                                            <p className="font-bold text-blue-400">Llama 3.3 70B</p>
-                                        </div>
-                                    </div>
-
-                                    <div className="glass p-6 rounded-2xl">
-                                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                                            <i className="fas fa-bolt text-yellow-400"></i> Active Skills
-                                        </h2>
-                                        <div className="flex flex-wrap gap-3">
-                                            {status.tools?.map(tool => (
-                                                <span key={tool} className="bg-slate-800 px-4 py-2 rounded-xl text-sm border border-slate-700">
-                                                    {tool}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
+                    {/* Main Content Area */}
+                    <div className="flex-1 flex flex-col min-w-0">
+                        {/* Top Bar */}
+                        <header className="h-16 border-b border-openclaw-border bg-openclaw-surface flex items-center justify-between px-6">
+                            <div className="flex gap-3">
+                                <StatusBadge label="Worker" value="Active" active={true} />
+                                <StatusBadge label="D1 DB" value="Connected" active={true} />
+                                <StatusBadge label="AI" value="Online" active={true} />
+                            </div>
+                            <div className="hidden md:flex items-center gap-4">
+                                <div className="flex items-center gap-2 text-slate-400">
+                                    <i className="fas fa-clock text-[10px]"></i>
+                                    <span className="text-[10px] font-mono uppercase font-bold tracking-tighter">Latency: 24ms</span>
                                 </div>
-                            )}
+                                <div className="w-8 h-8 rounded-full bg-slate-800 border border-openclaw-border flex items-center justify-center text-slate-400">
+                                    <i className="fas fa-user text-xs"></i>
+                                </div>
+                            </div>
+                        </header>
 
-                            {activeTab === 'logs' && (
-                                <div className="glass rounded-2xl h-[600px] flex flex-col">
-                                    <div className="p-4 border-b border-white/10 flex justify-between items-center">
-                                        <h2 className="font-bold">Real-time Activity</h2>
-                                        <button onClick={fetchLogs} className="text-slate-400 hover:text-white"><i className="fas fa-sync-alt"></i></button>
-                                    </div>
-                                    <div className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2">
-                                        {logs.map(log => (
-                                            <div key={log.id} className="flex gap-4 border-l-2 border-slate-700 pl-4 hover:bg-white/5 transition py-1">
-                                                <span className="text-slate-500 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-                                                <span className={`uppercase text-[10px] px-1 rounded h-fit mt-1 font-bold ${
-                                                    log.level === 'error' ? 'bg-red-500/20 text-red-400' : 
-                                                    log.level === 'info' ? 'bg-blue-500/20 text-blue-400' : 
-                                                    'bg-green-500/20 text-green-400'
-                                                }`}>{log.level}</span>
-                                                <span className="text-slate-300">{log.message}</span>
+                        {/* Viewport */}
+                        <main className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+                            {activeTab === 'overview' && (
+                                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        {[
+                                            { label: 'Conversations', value: '24', icon: 'fa-comments', color: 'text-blue-400' },
+                                            { label: 'Total API Calls', value: '1,402', icon: 'fa-bolt', color: 'text-yellow-400' },
+                                            { label: 'Token usage', value: '1.2M', icon: 'fa-brain', color: 'text-purple-400' },
+                                            { label: 'Storage', value: '0.04 MB', icon: 'fa-database', color: 'text-cyan-400' }
+                                        ].map(stat => (
+                                            <div className="glass p-5 rounded-2xl relative overflow-hidden group">
+                                                <div className="relative z-10">
+                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{stat.label}</p>
+                                                    <p className="text-2xl font-black text-white">{stat.value}</p>
+                                                </div>
+                                                <i className={`fas ${stat.icon} absolute -right-4 -bottom-4 text-6xl opacity-5 group-hover:scale-110 transition-transform ${stat.color}`}></i>
                                             </div>
                                         ))}
                                     </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                        <div className="lg:col-span-2 glass rounded-2xl p-6">
+                                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-2">
+                                                <i className="fas fa-history text-openclaw-primary"></i> Recent Agent Thought Stream
+                                            </h3>
+                                            <div className="space-y-4">
+                                                {logs.slice(-3).map(log => (
+                                                    <div className="flex items-start gap-4 p-4 rounded-xl bg-openclaw-surface-light/30 border border-white/5">
+                                                        <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${log.level === 'error' ? 'bg-red-500' : 'bg-openclaw-accent'}`}></div>
+                                                        <p className="text-sm font-bold text-slate-300 leading-relaxed">{log.message}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="glass rounded-2xl p-6">
+                                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6">Active Channels</h3>
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between p-3 rounded-xl bg-openclaw-surface-light border border-white/5">
+                                                    <div className="flex items-center gap-3">
+                                                        <i className="fab fa-telegram text-blue-400 text-lg"></i>
+                                                        <span className="text-xs font-bold uppercase tracking-wider">Telegram Bot</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold text-openclaw-accent">CONNECTED</span>
+                                                </div>
+                                                <div className="flex items-center justify-between p-3 rounded-xl bg-openclaw-surface-light border border-white/5 opacity-40">
+                                                    <div className="flex items-center gap-3 text-slate-500">
+                                                        <i className="fab fa-whatsapp text-lg"></i>
+                                                        <span className="text-xs font-bold uppercase tracking-wider">WhatsApp</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold">DISABLED</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
-                        </div>
+
+                            {activeTab === 'skills' && (
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in zoom-in-95 duration-300">
+                                    {status.tools.map(tool => (
+                                        <div key={tool} className="glass p-6 rounded-2xl border-b-4 border-b-openclaw-primary group hover:bg-openclaw-surface-light/80 transition-all">
+                                            <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                                <i className="fas fa-puzzle-piece text-openclaw-primary"></i>
+                                            </div>
+                                            <h4 className="font-black text-sm uppercase tracking-wider mb-2">{tool}</h4>
+                                            <p className="text-xs text-slate-500 font-bold mb-4">Core native skill enabled for recursive reasoning.</p>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] font-bold text-openclaw-accent">INSTALLED</span>
+                                                <i className="fas fa-chevron-right text-slate-700 text-xs"></i>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="glass p-6 rounded-2xl border-dashed border-2 border-slate-800 flex flex-col items-center justify-center text-slate-600 hover:text-slate-400 transition cursor-pointer">
+                                        <i className="fas fa-plus-circle text-2xl mb-2"></i>
+                                        <span className="text-[10px] font-black uppercase tracking-widest">Install New Skill</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'console' && (
+                                <div className="glass rounded-2xl h-[calc(100vh-12rem)] flex flex-col overflow-hidden animate-in slide-in-from-right-4 duration-300">
+                                    <div className="bg-openclaw-surface-light/80 p-3 border-b border-openclaw-border flex items-center gap-2">
+                                        <div className="flex gap-1.5 mr-4">
+                                            <div className="w-2.5 h-2.5 rounded-full bg-red-500/30"></div>
+                                            <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/30"></div>
+                                            <div className="w-2.5 h-2.5 rounded-full bg-green-500/30"></div>
+                                        </div>
+                                        <i className="fas fa-terminal text-[10px] text-slate-500"></i>
+                                        <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">Thought_Stream_v1.sh</span>
+                                    </div>
+                                    <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-1 bg-black/40 scrollbar-hide">
+                                        <p className="text-openclaw-primary mb-4 text-xs font-bold">[SYSTEM] Kernel initialized. Standing by for user input via Telegram API...</p>
+                                        {logs.map(log => (
+                                            <div key={log.id} className="group flex gap-3 py-0.5 hover:bg-white/5 transition">
+                                                <span className="text-slate-700 shrink-0 text-xs">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                                                <span className={`uppercase text-[9px] px-1 rounded h-fit mt-1 font-black leading-none py-1 border shrink-0 ${
+                                                    log.level === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 
+                                                    log.level === 'info' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' : 
+                                                    'bg-openclaw-accent/10 text-openclaw-accent border-openclaw-accent/20'
+                                                }`}>{log.level}</span>
+                                                <span className="text-slate-300 leading-tight tracking-tight break-all">{log.message}</span>
+                                            </div>
+                                        ))}
+                                        <div className="flex gap-2 items-center text-openclaw-accent animate-pulse mt-4">
+                                            <i className="fas fa-chevron-right text-[10px]"></i>
+                                            <span className="w-2 h-4 bg-openclaw-accent"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </main>
                     </div>
                 </div>
             );
