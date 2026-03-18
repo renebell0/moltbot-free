@@ -5,14 +5,17 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "test": "vitest run",
     "types": "wrangler types"
   },
   "dependencies": {
     "hono": "^4.11.6"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.13.2",
     "@cloudflare/workers-types": "^4.20250109.0",
-    "wrangler": "^4.50.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.50.0"
   }
 }
