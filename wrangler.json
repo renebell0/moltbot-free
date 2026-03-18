@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "moltbot-free",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-05-02",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "moltbot_db",
+      "database_id": "REPLACE_WITH_D1_ID"
+    }
+  ],
+  "ai": {
+    "binding": "AI"
+  },
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "moltbot_files"
+    }
+  ],
+  "vars": {
+    "ALLOWED_USER_IDS": "",
+    "TELEGRAM_BOT_TOKEN": "REPLACE_WITH_TOKEN",
+    "GOOGLE_SEARCH_API_KEY": "REPLACE_WITH_KEY",
+    "GOOGLE_SEARCH_CX": "REPLACE_WITH_CX"
+  }
+}
