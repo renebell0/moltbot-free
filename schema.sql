@@ -23,10 +23,18 @@ CREATE TABLE IF NOT EXISTS skills (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT UNIQUE NOT NULL,
   description TEXT,
-  schema_json TEXT NOT NULL, -- JSON definition for the LLM
-  endpoint_url TEXT, -- Optional URL for external logic
+  schema_json TEXT NOT NULL,
+  endpoint_url TEXT,
   active INTEGER DEFAULT 1
 );
+
+CREATE TABLE IF NOT EXISTS config (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+-- Initialize default model
+INSERT OR IGNORE INTO config (key, value) VALUES ('active_model', '@cf/meta/llama-3.3-70b-instruct-fp8-fast');
 
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);

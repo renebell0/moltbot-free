@@ -7,7 +7,10 @@ export async function runAgent(
   chatId: string
 ): Promise<{ text: string; image?: any }> {
   let currentMessages = [...messages];
-  const model = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
+  
+  // 0. Fetch Active Model from config
+  const config = await env.DB.prepare('SELECT value FROM config WHERE key = ?').bind('active_model').first('value');
+  const model = (config as string) || '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
   
   // 1. Fetch Dynamic Skills from D1
   const { results: dbSkills } = await env.DB.prepare('SELECT * FROM skills WHERE active = 1').all();

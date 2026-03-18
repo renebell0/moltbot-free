@@ -50,13 +50,31 @@ async function sendTelegram(chatId: string, text: string, token: string) {
 // API Routes
 app.get('/api/status', async (c) => {
   const stats = await getStats(c.env.DB);
+  const activeModel = await c.env.DB.prepare('SELECT value FROM config WHERE key = ?').bind('active_model').first('value');
+  
   return c.json({
     ...stats,
+    active_model: activeModel,
+    available_models: [
+      { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', name: 'Llama 3.3 70B (Fast)' },
+      { id: '@cf/meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B' },
+      { id: '@cf/qwen/qwen1.5-14b-chat-awq', name: 'Qwen 1.5 14B' },
+      { id: '@cf/google/gemma-7b-it-lora', name: 'Gemma 7B' },
+      { id: '@cf/mistral/mistral-7b-instruct-v0.1', name: 'Mistral 7B' }
+    ],
     platform: 'Cloudflare Workers (Free)',
     interface: 'Telegram + Web UI',
     tools: ['Google Search', 'Web Reader', 'Image Gen'],
     status: 'Operational'
   });
+});
+
+app.post('/api/config', async (c) => {
+  const { key, value } = await c.req.json();
+  await c.env.DB.prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)')
+    .bind(key, value)
+    .run();
+  return c.json({ success: true });
 });
 
 app.get('/api/logs', async (c) => {
