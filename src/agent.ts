@@ -37,7 +37,9 @@ export async function runAgent(
         const args = toolCall.arguments || {};
         let result = '';
 
-        console.log(`Executing tool: ${name} with args:`, args);
+        await env.DB.prepare('INSERT INTO logs (level, message) VALUES (?, ?)')
+          .bind('info', `Executing tool: ${name} with args: ${JSON.stringify(args)}`)
+          .run();
 
         if (name === 'google_search') {
           result = await googleSearch(args.query, env);
@@ -46,6 +48,9 @@ export async function runAgent(
         } else if (name === 'generate_image') {
           const imgData = await generateImage(args.prompt, env);
           if (imgData) {
+            await env.DB.prepare('INSERT INTO logs (level, message) VALUES (?, ?)')
+              .bind('success', `Image generated for: ${args.prompt}`)
+              .run();
             return { text: `Generated image for: ${args.prompt}`, image: imgData };
           }
           result = 'Failed to generate image.';
@@ -58,6 +63,9 @@ export async function runAgent(
       }
     } catch (e) {
       console.error('Agent error:', e);
+      await env.DB.prepare('INSERT INTO logs (level, message) VALUES (?, ?)')
+        .bind('error', `Agent Error: ${e}`)
+        .run();
       return { text: `Sorry, I encountered an error: ${e}` };
     }
   }

@@ -23,6 +23,12 @@ async function saveMessage(chatId: string, role: string, content: string, db: D1
     .run();
 }
 
+async function addLog(level: string, message: string, db: D1Database) {
+  await db.prepare('INSERT INTO logs (level, message) VALUES (?, ?)')
+    .bind(level, message)
+    .run();
+}
+
 // Telegram helpers
 async function sendTelegram(chatId: string, text: string, token: string) {
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
@@ -52,6 +58,21 @@ async function sendTelegramPhoto(chatId: string, photo: any, token: string) {
 
 // Routes
 app.get('/', (c) => c.text('Moltbot-Free is running!'));
+
+app.get('/api/logs', async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50').all();
+  return c.json(results);
+});
+
+app.get('/api/status', async (c) => {
+  return c.json({
+    bot_name: 'Moltbot-Free',
+    platform: 'Cloudflare Workers (Free)',
+    interface: 'Telegram',
+    tools: ['Google Search', 'Web Reader', 'Image Gen'],
+    db_id: c.env.DB ? 'Connected' : 'Error'
+  });
+});
 
 app.get('/setup', async (c) => {
   const url = new URL(c.req.url);

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Moltbot-Free | Control Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [status, setStatus] = useState({});
+            const [logs, setLogs] = useState([]);
+            const [activeTab, setActiveTab] = useState('status');
+
+            useEffect(() => {
+                fetchStatus();
+                fetchLogs();
+                const interval = setInterval(() => {
+                    fetchLogs();
+                }, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const fetchStatus = async () => {
+                try {
+                    const res = await fetch('/api/status');
+                    const data = await res.json();
+                    setStatus(data);
+                } catch (e) { console.error(e); }
+            };
+
+            const fetchLogs = async () => {
+                try {
+                    const res = await fetch('/api/logs');
+                    const data = await res.json();
+                    setLogs(data);
+                } catch (e) { console.error(e); }
+            };
+
+            return (
+                <div className="min-h-screen flex flex-col p-4 md:p-8">
+                    {/* Header */}
+                    <div className="flex justify-between items-center mb-8 glass p-4 rounded-2xl">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                                <i className="fas fa-robot text-xl"></i>
+                            </div>
+                            <div>
+                                <h1 className="text-xl font-bold tracking-tight">Moltbot-Free</h1>
+                                <p className="text-xs text-blue-400">Agentic OS v1.0.0</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <span className="flex items-center gap-2 bg-green-500/10 text-green-400 px-3 py-1 rounded-full text-xs font-medium border border-green-500/20">
+                                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                                System Online
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1">
+                        {/* Sidebar */}
+                        <div className="lg:col-span-1 space-y-4">
+                            <button 
+                                onClick={() => setActiveTab('status')}
+                                className={`w-full text-left p-4 rounded-xl flex items-center gap-3 transition ${activeTab === 'status' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+                                <i className="fas fa-chart-line"></i> Status & Config
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('logs')}
+                                className={`w-full text-left p-4 rounded-xl flex items-center gap-3 transition ${activeTab === 'logs' ? 'bg-blue-600' : 'hover:bg-slate-800'}`}>
+                                <i className="fas fa-terminal"></i> Activity Logs
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="lg:col-span-3">
+                            {activeTab === 'status' && (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="glass p-6 rounded-2xl">
+                                            <p className="text-slate-400 text-sm mb-1">Platform</p>
+                                            <p className="font-bold">{status.platform}</p>
+                                        </div>
+                                        <div className="glass p-6 rounded-2xl">
+                                            <p className="text-slate-400 text-sm mb-1">Interface</p>
+                                            <p className="font-bold">{status.interface}</p>
+                                        </div>
+                                        <div className="glass p-6 rounded-2xl">
+                                            <p className="text-slate-400 text-sm mb-1">Model</p>
+                                            <p className="font-bold text-blue-400">Llama 3.3 70B</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="glass p-6 rounded-2xl">
+                                        <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+                                            <i className="fas fa-bolt text-yellow-400"></i> Active Skills
+                                        </h2>
+                                        <div className="flex flex-wrap gap-3">
+                                            {status.tools?.map(tool => (
+                                                <span key={tool} className="bg-slate-800 px-4 py-2 rounded-xl text-sm border border-slate-700">
+                                                    {tool}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeTab === 'logs' && (
+                                <div className="glass rounded-2xl h-[600px] flex flex-col">
+                                    <div className="p-4 border-b border-white/10 flex justify-between items-center">
+                                        <h2 className="font-bold">Real-time Activity</h2>
+                                        <button onClick={fetchLogs} className="text-slate-400 hover:text-white"><i className="fas fa-sync-alt"></i></button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto p-4 font-mono text-sm space-y-2">
+                                        {logs.map(log => (
+                                            <div key={log.id} className="flex gap-4 border-l-2 border-slate-700 pl-4 hover:bg-white/5 transition py-1">
+                                                <span className="text-slate-500 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                                <span className={`uppercase text-[10px] px-1 rounded h-fit mt-1 font-bold ${
+                                                    log.level === 'error' ? 'bg-red-500/20 text-red-400' : 
+                                                    log.level === 'info' ? 'bg-blue-500/20 text-blue-400' : 
+                                                    'bg-green-500/20 text-green-400'
+                                                }`}>{log.level}</span>
+                                                <span className="text-slate-300">{log.message}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
