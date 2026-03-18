@@ -4,10 +4,10 @@ import { runAgent } from './agent';
 
 const app = new Hono<{ Bindings: Env }>();
 
-// Database helpers
+// Database & Stats Helpers
 async function getHistory(chatId: string, db: D1Database): Promise<Message[]> {
   const { results } = await db
-    .prepare('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY timestamp DESC LIMIT 10')
+    .prepare('SELECT role, content FROM messages WHERE chat_id = ? ORDER BY id DESC LIMIT 15')
     .bind(chatId)
     .all();
   
@@ -23,113 +23,86 @@ async function saveMessage(chatId: string, role: string, content: string, db: D1
     .run();
 }
 
-async function addLog(level: string, message: string, db: D1Database) {
-  await db.prepare('INSERT INTO logs (level, message) VALUES (?, ?)')
-    .bind(level, message)
-    .run();
+async function getStats(db: D1Database) {
+  const conversations = await db.prepare('SELECT COUNT(DISTINCT chat_id) as count FROM messages').first('count');
+  const totalMessages = await db.prepare('SELECT COUNT(*) as count FROM messages').first('count');
+  const totalLogs = await db.prepare('SELECT COUNT(*) as count FROM logs').first('count');
+  
+  return {
+    conversations: conversations || 0,
+    totalMessages: totalMessages || 0,
+    totalLogs: totalLogs || 0,
+    model: 'Llama 3.3 70B',
+    storage_kb: Math.round((Number(totalMessages) * 0.5)), // Rough estimate
+  };
 }
 
-// Telegram helpers
+// Telegram Helpers
 async function sendTelegram(chatId: string, text: string, token: string) {
   const url = `https://api.telegram.org/bot${token}/sendMessage`;
   await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: text,
-      parse_mode: 'Markdown'
-    })
+    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' })
   });
 }
 
-async function sendTelegramPhoto(chatId: string, photo: any, token: string) {
-  const url = `https://api.telegram.org/bot${token}/sendPhoto`;
-  const formData = new FormData();
-  formData.append('chat_id', chatId);
-  const blob = new Blob([photo], { type: 'image/png' });
-  formData.append('photo', blob, 'image.png');
-  
-  await fetch(url, {
-    method: 'POST',
-    body: formData
+// API Routes
+app.get('/api/status', async (c) => {
+  const stats = await getStats(c.env.DB);
+  return c.json({
+    ...stats,
+    platform: 'Cloudflare Workers (Free)',
+    interface: 'Telegram + Web UI',
+    tools: ['Google Search', 'Web Reader', 'Image Gen'],
+    status: 'Operational'
   });
-}
-
-// Routes
-app.get('/', (c) => c.text('Moltbot-Free is running!'));
+});
 
 app.get('/api/logs', async (c) => {
-  const { results } = await c.env.DB.prepare('SELECT * FROM logs ORDER BY timestamp DESC LIMIT 50').all();
+  const { results } = await c.env.DB.prepare('SELECT * FROM logs ORDER BY timestamp DESC LIMIT 100').all();
   return c.json(results);
 });
 
-app.get('/api/status', async (c) => {
-  return c.json({
-    bot_name: 'Moltbot-Free',
-    platform: 'Cloudflare Workers (Free)',
-    interface: 'Telegram',
-    tools: ['Google Search', 'Web Reader', 'Image Gen'],
-    db_id: c.env.DB ? 'Connected' : 'Error'
-  });
+app.post('/api/chat', async (c) => {
+  const { text, chatId = 'web-user' } = await c.req.json();
+  const env = c.env;
+
+  await saveMessage(chatId, 'user', text, env.DB);
+  const history = await getHistory(chatId, env.DB);
+  
+  const systemPrompt: Message = {
+    role: 'system',
+    content: 'You are Moltbot, a personal AI assistant. You are responding via the Web Dashboard.'
+  };
+
+  const result = await runAgent([systemPrompt, ...history], env, chatId);
+  await saveMessage(chatId, 'assistant', result.text, env.DB);
+  
+  return c.json({ text: result.text, image: result.image });
 });
 
+// Setup & Webhook
 app.get('/setup', async (c) => {
   const url = new URL(c.req.url);
   const webhookUrl = `${url.protocol}//${url.host}/webhook`;
-  const token = c.env.TELEGRAM_BOT_TOKEN;
-  
-  const response = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=${webhookUrl}`);
-  const data = await response.json();
-  return c.json(data);
+  const response = await fetch(`https://api.telegram.org/bot${c.env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${webhookUrl}`);
+  return c.json(await response.json());
 });
 
 app.post('/webhook', async (c) => {
   const update: TelegramUpdate = await c.req.json();
-  const env = c.env;
-  
-  if (update.message && update.message.text) {
+  if (update.message?.text) {
     const chatId = update.message.chat.id.toString();
-    const userId = update.message.from.id.toString();
     const text = update.message.text;
 
-    // Security check: Only allow authorized users if set
-    if (env.ALLOWED_USER_IDS && !env.ALLOWED_USER_IDS.split(',').includes(userId)) {
-      await sendTelegram(chatId, 'Unauthorized access.', env.TELEGRAM_BOT_TOKEN);
-      return c.json({ ok: true });
-    }
-
-    // Load history
-    const history = await getHistory(chatId, env.DB);
-    const systemPrompt: Message = {
-      role: 'system',
-      content: 'You are Moltbot, a personal AI assistant running on Cloudflare. You are helpful, concise, and have access to the web.'
-    };
+    await saveMessage(chatId, 'user', text, c.env.DB);
+    const history = await getHistory(chatId, c.env.DB);
+    const result = await runAgent([{ role: 'system', content: 'You are Moltbot.' }, ...history], c.env, chatId);
     
-    const messages: Message[] = [systemPrompt, ...history, { role: 'user', content: text }];
-    
-    // Save user message
-    await saveMessage(chatId, 'user', text, env.DB);
-
-    // Let the agent think
-    try {
-      const result = await runAgent(messages, env, chatId);
-      
-      // Save assistant response
-      await saveMessage(chatId, 'assistant', result.text, env.DB);
-
-      // Send to Telegram
-      if (result.image) {
-        await sendTelegramPhoto(chatId, result.image, env.TELEGRAM_BOT_TOKEN);
-      } else {
-        await sendTelegram(chatId, result.text, env.TELEGRAM_BOT_TOKEN);
-      }
-    } catch (e) {
-      console.error('Webhook error:', e);
-      await sendTelegram(chatId, `Error: ${e}`, env.TELEGRAM_BOT_TOKEN);
-    }
+    await saveMessage(chatId, 'assistant', result.text, c.env.DB);
+    await sendTelegram(chatId, result.text, c.env.TELEGRAM_BOT_TOKEN);
   }
-
   return c.json({ ok: true });
 });
 
