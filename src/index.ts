@@ -64,6 +64,25 @@ app.get('/api/logs', async (c) => {
   return c.json(results);
 });
 
+app.get('/api/skills', async (c) => {
+  const { results } = await c.env.DB.prepare('SELECT * FROM skills').all();
+  return c.json(results);
+});
+
+app.post('/api/skills', async (c) => {
+  const { name, description, schema_json, endpoint_url } = await c.req.json();
+  await c.env.DB.prepare('INSERT INTO skills (name, description, schema_json, endpoint_url) VALUES (?, ?, ?, ?)')
+    .bind(name, description, schema_json, endpoint_url)
+    .run();
+  return c.json({ success: true });
+});
+
+app.delete('/api/skills/:id', async (c) => {
+  const id = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM skills WHERE id = ?').bind(id).run();
+  return c.json({ success: true });
+});
+
 app.post('/api/chat', async (c) => {
   const { text, chatId = 'web-user' } = await c.req.json();
   const env = c.env;

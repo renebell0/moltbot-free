@@ -19,5 +19,14 @@ CREATE TABLE IF NOT EXISTS logs (
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS skills (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE NOT NULL,
+  description TEXT,
+  schema_json TEXT NOT NULL, -- JSON definition for the LLM
+  endpoint_url TEXT, -- Optional URL for external logic
+  active INTEGER DEFAULT 1
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id);
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
