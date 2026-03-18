@@ -20,7 +20,7 @@
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "moltbot_files"
+      "bucket_name": "moltbot-files"
     }
   ],
   "vars": {
