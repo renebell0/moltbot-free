@@ -28,9 +28,6 @@
     }
   ],
   "vars": {
-    "ALLOWED_USER_IDS": "",
-    "TELEGRAM_BOT_TOKEN": "REPLACE_WITH_TOKEN",
-    "GOOGLE_SEARCH_API_KEY": "REPLACE_WITH_KEY",
-    "GOOGLE_SEARCH_CX": "REPLACE_WITH_CX"
+    "ALLOWED_USER_IDS": ""
   }
 }

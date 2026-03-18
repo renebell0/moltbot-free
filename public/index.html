@@ -46,14 +46,9 @@
         const { useState, useEffect, useRef } = React;
         const { motion, AnimatePresence } = window.Motion;
 
-        // --- Custom Components ---
         const Card = ({ children, className = "", delay = 0 }) => (
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay }}
-                className={`glass p-6 rounded-[2rem] hover:border-openclaw-primary/30 transition-colors group relative overflow-hidden ${className}`}
-            >
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay }}
+                className={`glass p-6 rounded-[2rem] hover:border-openclaw-primary/30 transition-colors group relative overflow-hidden ${className}`}>
                 {children}
             </motion.div>
         );
@@ -66,12 +61,12 @@
             </div>
         );
 
-        // --- Analytics Chart Component ---
         const MetricsChart = ({ data }) => {
             const chartRef = useRef(null);
             const chartInstance = useRef(null);
 
             useEffect(() => {
+                if (!data || data.length === 0) return;
                 if (chartInstance.current) chartInstance.current.destroy();
                 const ctx = chartRef.current.getContext('2d');
                 chartInstance.current = new Chart(ctx, {
@@ -93,18 +88,21 @@
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: { legend: { display: false } },
-                        scales: {
-                            x: { display: false },
-                            y: { grid: { color: '#1f1f2e' }, ticks: { color: '#475569', font: { size: 10 } } }
-                        }
+                        scales: { x: { display: false }, y: { grid: { color: '#1f1f2e' }, ticks: { color: '#475569', font: { size: 10 } } } }
                     }
                 });
             }, [data]);
 
+            if (!data || data.length === 0) return (
+                <div className="h-full flex flex-col items-center justify-center border border-dashed border-slate-800 rounded-3xl text-slate-700">
+                    <i className="fas fa-chart-line text-3xl mb-2 opacity-20"></i>
+                    <p className="text-[10px] font-black uppercase tracking-widest">No telemetry data available yet</p>
+                </div>
+            );
+
             return <canvas ref={chartRef} />;
         };
 
-        // --- Main App ---
         function App() {
             const [status, setStatus] = useState({ tools: [], conversations: 0, totalMessages: 0, available_models: [], active_model: '' });
             const [logs, setLogs] = useState([]);
@@ -133,6 +131,16 @@
                 } catch (e) {}
             };
 
+            const handleModelChange = async (newModel) => {
+                await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'active_model', value: newModel }) });
+                refreshAll();
+            };
+
+            const initSystem = async () => {
+                await fetch('/api/init');
+                refreshAll();
+            };
+
             const handleSendMessage = async (e) => {
                 e.preventDefault();
                 if (!userInput.trim()) return;
@@ -148,12 +156,8 @@
 
             return (
                 <div className="flex h-screen bg-openclaw-bg text-slate-300">
-                    {/* Sidebar with Cinematic Entry */}
-                    <motion.div 
-                        initial={{ x: -100, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        className="w-72 border-r border-openclaw-border flex flex-col bg-openclaw-surface/50 backdrop-blur-3xl p-6 hidden lg:flex"
-                    >
+                    <motion.div initial={{ x: -100, opacity: 0 }} animate={{ x: 0, opacity: 1 }}
+                        className="w-72 border-r border-openclaw-border flex flex-col bg-openclaw-surface/50 backdrop-blur-3xl p-6 hidden lg:flex">
                         <div className="flex items-center gap-4 mb-12 px-2 animate-float">
                             <div className="w-12 h-12 bg-gradient-to-br from-openclaw-primary to-purple-600 rounded-2xl flex items-center justify-center glow-primary">
                                 <i className="fas fa-brain text-white text-xl"></i>
@@ -163,53 +167,35 @@
                                 <span className="text-[10px] font-black text-slate-500 tracking-[0.3em] uppercase">Enterprise v2.0</span>
                             </div>
                         </div>
-
                         <nav className="space-y-3">
                             {[
                                 { id: 'overview', icon: 'fa-chart-pie', label: 'Analytics' },
                                 { id: 'chat', icon: 'fa-comment-dots', label: 'Agent Hub' },
-                                { id: 'console', icon: 'fa-microchip', label: 'Kernel Logs' },
-                                { id: 'skills', icon: 'fa-bolt', label: 'Skill Matrix' }
+                                { id: 'console', icon: 'fa-microchip', label: 'Kernel Logs' }
                             ].map(item => (
-                                <motion.button 
-                                    whileHover={{ x: 5 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    key={item.id} 
-                                    onClick={() => setActiveTab(item.id)} 
-                                    className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all relative overflow-hidden ${
-                                        activeTab === item.id ? 'bg-openclaw-primary text-white shadow-2xl glow-primary' : 'hover:bg-white/5 text-slate-500'
-                                    }`}
-                                >
+                                <motion.button whileHover={{ x: 5 }} whileTap={{ scale: 0.95 }} key={item.id} onClick={() => setActiveTab(item.id)}
+                                    className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all relative overflow-hidden ${activeTab === item.id ? 'bg-openclaw-primary text-white shadow-2xl glow-primary' : 'hover:bg-white/5 text-slate-500'}`}>
                                     <i className={`fas ${item.icon} text-sm`}></i>
                                     <span className="text-[11px] font-black uppercase tracking-widest">{item.label}</span>
-                                    {activeTab === item.id && <motion.div layoutId="nav-bg" className="absolute inset-0 bg-gradient-to-r from-transparent to-white/10" />}
                                 </motion.button>
                             ))}
                         </nav>
-
                         <div className="mt-auto p-4 bg-openclaw-surface-light/30 rounded-3xl border border-white/5">
-                            <p className="text-[9px] font-black text-slate-600 uppercase mb-3">Model Efficiency</p>
-                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                                <motion.div initial={{ width: 0 }} animate={{ width: '75%' }} className="h-full bg-openclaw-accent glow-accent" />
-                            </div>
+                            <p className="text-[9px] font-black text-slate-600 uppercase mb-3 text-center">System Control</p>
+                            <button onClick={initSystem} className="w-full bg-openclaw-accent/10 border border-openclaw-accent/20 text-openclaw-accent text-[9px] font-black uppercase py-2 rounded-xl hover:bg-openclaw-accent/20 transition-all">Initialize Kernel</button>
                         </div>
                     </motion.div>
 
-                    {/* Main Content */}
                     <div className="flex-1 flex flex-col min-w-0">
                         <header className="h-20 border-b border-openclaw-border flex items-center justify-between px-8 bg-openclaw-surface/30 backdrop-blur-xl">
                             <div className="flex gap-3">
                                 <StatusBadge label="Kernel" value="Stable" active={true} />
                                 <StatusBadge label="Uptime" value="100%" active={true} />
                             </div>
-                            
                             <motion.div whileHover={{ scale: 1.02 }} className="flex items-center gap-3 bg-openclaw-bg border border-openclaw-border p-1.5 pl-4 rounded-2xl">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-tighter">AI Engine</span>
-                                <select 
-                                    value={status.active_model} 
-                                    onChange={(e) => handleModelChange(e.target.value)}
-                                    className="bg-openclaw-surface-light border-none rounded-xl text-[10px] font-black uppercase px-3 py-2 outline-none text-openclaw-accent cursor-pointer"
-                                >
+                                <span className="text-[10px] font-black text-slate-500 uppercase">AI Engine</span>
+                                <select value={status.active_model} onChange={(e) => handleModelChange(e.target.value)}
+                                    className="bg-openclaw-surface-light border-none rounded-xl text-[10px] font-black uppercase px-3 py-2 outline-none text-openclaw-accent cursor-pointer">
                                     {status.available_models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                 </select>
                             </motion.div>
@@ -218,92 +204,71 @@
                         <main className="flex-1 p-8 overflow-hidden relative">
                             <AnimatePresence mode="wait">
                                 {activeTab === 'overview' && (
-                                    <motion.div 
-                                        key="overview"
-                                        initial={{ opacity: 0, scale: 0.98 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        exit={{ opacity: 0, scale: 1.02 }}
-                                        className="h-full grid grid-cols-12 grid-rows-6 gap-6"
-                                    >
+                                    <motion.div key="overview" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="h-full grid grid-cols-12 grid-rows-6 gap-6">
                                         <Card className="col-span-12 lg:col-span-8 row-span-4 flex flex-col">
                                             <div className="flex justify-between items-start mb-8">
-                                                <div>
-                                                    <h3 className="text-xl font-black text-white tracking-tighter uppercase">Latency Telemetry</h3>
-                                                    <p className="text-xs text-slate-500 font-bold">Real-time inference performance (ms)</p>
-                                                </div>
+                                                <div><h3 className="text-xl font-black text-white tracking-tighter uppercase">Latency Telemetry</h3><p className="text-xs text-slate-500 font-bold">Real-time inference performance (ms)</p></div>
                                                 <div className="text-right">
-                                                    <p className="text-2xl font-black text-openclaw-accent tracking-tighter">
-                                                        {metrics.length > 0 ? Math.round(metrics[metrics.length-1].value) : 0}ms
-                                                    </p>
+                                                    <p className="text-2xl font-black text-openclaw-accent tracking-tighter">{metrics.length > 0 ? Math.round(metrics[metrics.length-1].value) : 0}ms</p>
                                                     <p className="text-[10px] font-black text-slate-600 uppercase">Avg Response</p>
                                                 </div>
                                             </div>
                                             <div className="flex-1 min-h-0"><MetricsChart data={metrics} /></div>
                                         </Card>
-
                                         <Card className="col-span-12 lg:col-span-4 row-span-2" delay={0.1}>
-                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Data Integrity</p>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Message Store</p>
                                             <p className="text-4xl font-black text-white tracking-tighter">{status.totalMessages}</p>
-                                            <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">Total Indexed Objects</p>
-                                            <div className="mt-6 flex gap-2">
-                                                <div className="flex-1 h-1 bg-openclaw-primary/20 rounded-full overflow-hidden">
-                                                    <div className="h-full bg-openclaw-primary w-2/3 shadow-[0_0_10px_#ff2d55]"></div>
-                                                </div>
-                                            </div>
+                                            <p className="text-[9px] font-black text-slate-600 uppercase mt-4">Database: Cloudflare D1</p>
                                         </Card>
-
                                         <Card className="col-span-12 lg:col-span-4 row-span-2" delay={0.2}>
-                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Network Traffic</p>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Active Channels</p>
                                             <p className="text-4xl font-black text-white tracking-tighter">{status.conversations}</p>
-                                            <p className="text-xs text-slate-400 mt-2 font-bold uppercase tracking-widest">Active Channels</p>
-                                            <div className="mt-6 flex -space-x-2">
-                                                {[1,2,3].map(i => <div key={i} className="w-8 h-8 rounded-full bg-slate-800 border-2 border-openclaw-surface" />)}
-                                            </div>
-                                        </Card>
-
-                                        <Card className="col-span-12 row-span-2" delay={0.3}>
-                                            <div className="flex items-center gap-6 h-full">
-                                                <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
-                                                    <i className="fas fa-shield-alt text-openclaw-accent text-2xl"></i>
-                                                </div>
-                                                <div>
-                                                    <h4 className="text-sm font-black text-white uppercase tracking-widest">Enterprise Firewall Active</h4>
-                                                    <p className="text-xs text-slate-500 font-bold mt-1">Filtering traffic via Cloudflare Workers Security Layer. All requests are proxied and encrypted.</p>
-                                                </div>
-                                            </div>
+                                            <div className="mt-4 flex gap-2"><i className="fab fa-telegram text-openclaw-accent"></i> <i className="fas fa-globe text-slate-600"></i></div>
                                         </Card>
                                     </motion.div>
                                 )}
 
                                 {activeTab === 'chat' && (
-                                    <motion.div 
-                                        key="chat"
-                                        initial={{ opacity: 0, x: 20 }}
-                                        animate={{ opacity: 1, x: 0 }}
-                                        className="h-full flex flex-col glass rounded-[2.5rem] overflow-hidden border-openclaw-primary/10"
-                                    >
+                                    <motion.div key="chat" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="h-full flex flex-col glass rounded-[2.5rem] overflow-hidden">
                                         <div className="flex-1 overflow-y-auto p-8 space-y-6 scrollbar-hide">
+                                            {chatMessages.length === 0 && (
+                                                <div className="h-full flex flex-col items-center justify-center opacity-20">
+                                                    <i className="fas fa-terminal text-6xl mb-4"></i>
+                                                    <p className="text-xs font-black uppercase tracking-[0.5em]">Kernel Standing By</p>
+                                                </div>
+                                            )}
                                             {chatMessages.map((m, i) => (
-                                                <motion.div 
-                                                    initial={{ opacity: 0, y: 10 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    key={i} 
-                                                    className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                                                >
-                                                    <div className={`max-w-[70%] p-5 rounded-3xl text-sm font-bold leading-relaxed border ${
-                                                        m.role === 'user' ? 'bg-openclaw-primary border-transparent text-white shadow-2xl glow-primary' : 'bg-openclaw-surface-light border-white/5 text-slate-200'
-                                                    }`}>
+                                                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                                    <div className={`max-w-[70%] p-5 rounded-3xl text-sm font-bold border ${m.role === 'user' ? 'bg-openclaw-primary border-transparent text-white glow-primary' : 'bg-openclaw-surface-light border-white/5 text-slate-200'}`}>
                                                         {m.content}
                                                     </div>
-                                                </motion.div>
+                                                </div>
                                             ))}
-                                            {isTyping && <div className="flex gap-2 p-4 bg-white/5 w-fit rounded-2xl animate-pulse"><div className="w-2 h-2 bg-openclaw-accent rounded-full"></div><div className="w-2 h-2 bg-openclaw-accent rounded-full opacity-50"></div></div>}
                                         </div>
                                         <div className="p-6 bg-openclaw-surface/50 border-t border-white/5">
-                                            <form onSubmit={handleSendMessage} className="flex gap-4 max-w-5xl mx-auto bg-openclaw-bg p-2 rounded-[2rem] border border-white/5 shadow-2xl">
-                                                <input value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="Type a command to the kernel..." className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm" />
+                                            <form onSubmit={handleSendMessage} className="flex gap-4 max-w-5xl mx-auto bg-openclaw-bg p-2 rounded-[2rem] border border-white/5">
+                                                <input value={userInput} onChange={e => setUserInput(e.target.value)} placeholder="Send command..." className="flex-1 bg-transparent px-6 py-3 outline-none font-bold text-sm" />
                                                 <button type="submit" className="w-12 h-12 bg-openclaw-primary rounded-2xl text-white shadow-lg"><i className="fas fa-arrow-up"></i></button>
                                             </form>
+                                        </div>
+                                    </motion.div>
+                                )}
+
+                                {activeTab === 'console' && (
+                                    <motion.div key="console" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="h-full glass rounded-[2.5rem] p-8 flex flex-col">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Live Kernel Thoughts</h3>
+                                            <div className="flex gap-1"><div className="w-2 h-2 rounded-full bg-red-500/20"></div><div className="w-2 h-2 rounded-full bg-yellow-500/20"></div><div className="w-2 h-2 rounded-full bg-green-500/20"></div></div>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto font-mono text-[11px] space-y-2 scrollbar-hide bg-black/20 p-6 rounded-3xl">
+                                            {logs.length === 0 && <p className="text-slate-700 animate-pulse">Initializing pensamiento recursivo...</p>}
+                                            {logs.map(log => (
+                                                <div key={log.id} className="flex gap-4 border-l border-slate-800 pl-4 py-1">
+                                                    <span className="text-slate-600 shrink-0">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                                    <span className={`uppercase text-[9px] font-black h-fit px-1 rounded ${log.level === 'error' ? 'text-red-500' : log.level === 'info' ? 'text-openclaw-accent' : 'text-green-500'}`}>{log.level}</span>
+                                                    <span className="text-slate-400">{log.message}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </motion.div>
                                 )}
